@@ -12,17 +12,18 @@ def read_config(file_path):
         print(f"Error: The configuration file '{file_path}' was not found.")
 
 # Telnet to the device, using pexpect lab.
-def telnet_connect(ip, username, password, new_hostname):
+def telnet_connect(ip, username, password, new_hostname,secret):
     try:
-        t_connect = pexpect.spawn(f'telnet {ip}') # generate subprocess
+        t_connect = pexpect.spawn(f'telnet {ip}',timeout=30) # generate subprocess
 
         t_connect.expect('Username:') # enter console
         t_connect.sendline(username)
-
-        t_connect.expect('>') # enter previlege mode
-        t_connect.sendline('enable')
         t_connect.expect('Password:')
         t_connect.sendline(password)
+        t_connect.expect('>')  # enter previlege mode
+        t_connect.sendline('enable')
+        t_connect.expect('Password:')
+        t_connect.sendline(secret)
         t_connect.expect('#')
 
         t_connect.sendline('configure terminal') # enter configutation terminal
@@ -33,8 +34,9 @@ def telnet_connect(ip, username, password, new_hostname):
         # Output the running-config and save to file locally
         t_connect.sendline('exit')
         t_connect.expect('#')
-        t_connect.sendline('sh running-conf')
-        t_connect.expect('#') # to avoid 'sh running-conf' incomplete execution
+        t_connect.sendline('terminal length 0') # avoid incomplete output, interrupted by prompt "--more--"
+        t_connect.sendline('show running-conf')
+        t_connect.expect('#') # to avoid 'show running-conf' incomplete execution
 
         running_config = t_connect.before.decode() # save the running-config to file locally
         with open(f'{new_hostname}_running-config.txt','w') as file:
@@ -46,14 +48,16 @@ def telnet_connect(ip, username, password, new_hostname):
     except Exception as e:
         print(f"Failed to connect via Telnet: {e}") # catch the errors
 
-# SSH to the device, using netmiko lab.
-def ssh_connect(ip,username,password,new_hostname):
+# SSH to the device, using netmiko module.
+def ssh_connect(ip,username,password,new_hostname,secret):
     try:
         network_device = {
             'device_type': 'cisco_ios',
             'ip': ip,
             'username': username,
             'password': password,
+            'secret': secret,
+            'timeout': 30
         }# define a dictionary to store the configuration of device
 
         connection = ConnectHandler(**network_device) # generate SSH connect
@@ -65,8 +69,9 @@ def ssh_connect(ip,username,password,new_hostname):
 
         print(f"Hostname changed successfully via SSH to {new_hostname}")
 
+        connection.send_command('terminal length 0') # avoid incomplete output, interrupted by prompt "--more--"
         # Output the running-config and save to file locally
-        running_config = connection.send_command('sh running-config')
+        running_config = connection.send_command('show running-config')
         with open(f'{new_hostname}_running-config.txt','w') as file:
             file.write(running_config)
         print(f'Running-config saved to {new_hostname}_running-config.txt')
@@ -85,12 +90,13 @@ def main():
         username = device['username']
         password = device['password']
         connection_type = device['connection_type']
-        new_hostname = input(f'Enter the new hostname for {device['name']}:') # input new hostname
+        secret = device['secret']
+        new_hostname = input(f"Enter the new hostname for {device['name']}:") # input new hostname
 
         if connection_type == 'telnet':
-            telnet_connect(ip, username, password, new_hostname)
+            telnet_connect(ip, username, password, new_hostname,secret)
         elif connection_type == 'ssh':
-            ssh_connect(ip, username, password, new_hostname)
+            ssh_connect(ip, username, password, new_hostname,secret)
         else:
             print(f"Please input valid connection type for device {device['name']}")
 
