@@ -22,8 +22,13 @@ def telnet_connect(ip, username, password, new_hostname, secret):
         t_connect.expect('Password:')
         t_connect.sendline(password)
 
-        # expect '#' instead of '>'
-        t_connect.expect('#')
+        # Check if we need to enter enable mode
+        flag = t_connect.expect(['>', '#'])
+        if flag == 0:
+            t_connect.sendline('enable')
+            t_connect.expect('Password:')
+            t_connect.sendline(secret)
+            t_connect.expect('#')
 
         # Disable paging to get complete running-config
         t_connect.sendline('terminal length 0')
@@ -43,7 +48,7 @@ def telnet_connect(ip, username, password, new_hostname, secret):
         t_connect.expect('#')
 
         # Output the running-config and save to file locally
-        running_config = t_connect.before.split('show running-config')[-1].strip()  # make sure only output configuration content
+        running_config = t_connect.before.decode()  # make sure only output configuration content
         with open(f'{new_hostname}_running-config.txt', 'w') as file:
             file.write(running_config)
         print(running_config)
@@ -68,12 +73,12 @@ def ssh_connect(ip,username,password,new_hostname,secret):
 
         connection = ConnectHandler(**network_device) # generate SSH connect
 
-        #  enter enable mode if not there
-        if not connection.check_enable_mode():
-            connection.enable()
+        # enter enable mode if not there
+        # if not connection.check_enable_mode():
+        connection.enable()
 
         connection.config_mode() # enter configurate terminal
-        connection.send_command(f'hostname {new_hostname}') # change the hostname
+        connection.send_command(f'hostname {new_hostname}', expect_string=r'\(config\)#') # change the hostname
         connection.exit_config_mode()
 
         print(f"Hostname changed successfully via SSH to {new_hostname}")
@@ -83,7 +88,7 @@ def ssh_connect(ip,username,password,new_hostname,secret):
         running_config = connection.send_command('show running-config')
         with open(f'{new_hostname}_running-config.txt','w') as file:
             file.write(running_config)
-        print(f'Running-config saved to {new_hostname}_running-config.txt')
+        print(running_config)
 
         connection.disconnect()
     except Exception as e:
@@ -94,7 +99,7 @@ def main():
     config = read_config('config.yaml') # Using relative path, make sure scriptions and yaml file in the same directiory.
     if config is None:
         return
-    for device in config['device']: # using a loop to configure all the devices
+    for device in config['devices']: # using a loop to configure all the devices
         ip = device['ip']
         username = device['username']
         password = device['password']
