@@ -5,11 +5,31 @@ import pexpect
 # Read the configuration of the device from the YAML file
 def read_config(file_path):
     try:
-        with open(file_path,'r') as file:
-            config = yaml.safe_load((file))
-        return config # return a dictionary by pyyaml lab
+        with open(file_path, 'r') as file:
+            config = yaml.safe_load(file)
+        return config  # return a dictionary by pyyaml lab
     except FileNotFoundError:
         print(f"Error: The configuration file '{file_path}' was not found.")
+        
+        # Create a default YAML file if not found
+        default_config = {
+            'devices': [
+                {
+                    'name': 'default_device',
+                    'ip': '192.168.1.1',
+                    'username': 'admin',
+                    'password': 'password',
+                    'connection_type': 'ssh',
+                    'secret': 'enable_password'
+                }
+            ]
+        }
+        
+        with open(file_path, 'w') as file:
+            yaml.dump(default_config, file)
+        
+        print(f"A default configuration file '{file_path}' has been created. Please update it with the correct device information.")
+        return default_config
 
 # Telnet to the device, using pexpect lab.
 def telnet_connect(ip, username, password, new_hostname, secret):
