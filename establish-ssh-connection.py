@@ -42,16 +42,14 @@ def telnet_connect(ip, username, password, new_hostname, secret):
         print(f"Hostname changed successfully via Telnet to {new_hostname}")
 
         # Get running-config
-        t_connect.sendline('exit')
-        t_connect.expect('#')
-        t_connect.sendline('show running-config')
-        t_connect.expect('#')
-
-        # Output the running-config and save to file locally
-        running_config = t_connect.before.decode()  # make sure only output configuration content
-        with open(f'{new_hostname}_running-config.txt', 'w') as file:
-            file.write(running_config)
-        print(running_config)
+        # Ask user if they want to save running-config
+        save_config = input("Do you want to save the running-config to a local file? (yes/no): ").lower()
+        if save_config == 'yes':
+        # Get running-config
+            t_connect.sendline('exit')
+            t_connect.expect('#')
+            t_connect.sendline('show running-config')
+            t_connect.expect('#')
 
         t_connect.sendline('exit')
         t_connect.close()
@@ -84,11 +82,13 @@ def ssh_connect(ip,username,password,new_hostname,secret):
         print(f"Hostname changed successfully via SSH to {new_hostname}")
 
         connection.send_command('terminal length 0') # avoid incomplete output, interrupted by prompt "--more--"
+        save_config = input("Do you want to save the running-config to a local file? (yes/no): ").lower()
+        if save_config == 'yes':
         # Output the running-config and save to file locally
-        running_config = connection.send_command('show running-config')
-        with open(f'{new_hostname}_running-config.txt','w') as file:
-            file.write(running_config)
-        print(running_config)
+            running_config = connection.send_command('show running-config')
+            with open(f'{new_hostname}_running-config.txt','w') as file:
+                file.write(running_config)
+            print(running_config)
 
         connection.disconnect()
     except Exception as e:
