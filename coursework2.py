@@ -1,6 +1,6 @@
 import difflib
 from telnet_ssh_connection import read_config
-from netmiko import ConnectHandl er
+from netmiko import ConnectHandler
 def create_ssh_connection(ip,secret,username,password):
     try:
         network_device = {
@@ -12,14 +12,14 @@ def create_ssh_connection(ip,secret,username,password):
             'timeout': 30
         }
         connection = ConnectHandler(**network_device)
+        connection.enable()
+        connection.send_command('terminal length 0')
         return connection
     except Exception as e:
         print(f"Fail to connect via SSH :{e}")
 
 def compare_running_with_startup(connection):
     try:
-        connection.config_mode()
-        connection.send_command('terminal length 0')
         running_config = connection.send_command('show running-config')
         startup_config = connection.send_command('show startup-config')
         diff = difflib.unified_diff(startup_config.splitlines(),running_config.splitlines(),
@@ -41,8 +41,6 @@ def compare_running_with_startup(connection):
 
 def compare_running_with_local(connection,local_file_path):
     try:
-        connection.config_mode()
-        connection.send_command('terminal length 0')
         running_config = connection.send_command('show running-config')
         with open(local_file_path,'r') as file:
             local_config = file.read()
@@ -65,9 +63,11 @@ def compare_running_with_local(connection,local_file_path):
     except Exception as e:
         print(f"Failed to compare running-config with local configuration: {e}")
 
-
 def config_syslog(connection, syslog_server_ip):
+    pass
 
+def compare_running_with_harden(connection, harden_config_path):
+    pass
 
 def main_():
     config = read_config('config.yaml')
@@ -81,7 +81,7 @@ def main_():
         secret = device['secret']
         syslog_server_ip = input(f"Enter the syslog server IP for {device['name']}:")
         local_file_path = input(f"Enter the local configuration file path for {device['name']}:")
-        connection = create_ssh_connection(ip,username,password,secret)
+        connection = create_ssh_connection(ip,secret,username,password)
         if not connection:
             return
 
@@ -110,3 +110,4 @@ def main_():
                 print("Invalid choice. Please enter a number between 0 and 4.")
 
 if __name__ == "__main__":
+    main_()
