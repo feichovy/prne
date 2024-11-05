@@ -1,6 +1,46 @@
+#Remember ssh connect to device manually at first time due to Authentication
 import difflib
-from telnet_ssh_connection import read_config
+import yaml
 from netmiko import ConnectHandler
+from tkinter import simpledialog, messagebox
+import tkinter as tk
+# Harden configuration as dictionary
+HARDEN_CONFIG = [
+    'service password-encryption',
+    'no ip http server',
+    'no cdp run',
+    'snmp-server community public RO'
+]
+# Read Config from yaml file
+def read_config(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            config = yaml.safe_load(file)
+        return config  # return a dictionary by pyyaml lab
+    except FileNotFoundError:
+        print(f"Error: The configuration file '{file_path}' was not found.")
+
+        # Create a default YAML file if not found
+        default_config = {
+            'devices': [
+                {
+                    'name': 'default_device',
+                    'ip': '192.168.1.1',
+                    'username': 'admin',
+                    'password': 'password',
+                    'connection_type': 'ssh',
+                    'secret': 'enable_password'
+                }
+            ]
+        }
+
+        with open(file_path, 'w') as file:
+            yaml.dump(default_config, file)
+
+        print(
+            f"A default configuration file '{file_path}' has been created. Please update it with the correct device information.")
+        return default_config
+
 def create_ssh_connection(ip,secret,username,password):
     try:
         network_device = {
@@ -26,50 +66,69 @@ def compare_running_with_startup(connection):
                                     fromfile='Startup-Configuration',tofile='Running-Configuration',lineterm='')
         diff_output = list(diff)
         if not diff_output:
-            print("No differences found between running-config and startup-config.")
+            messagebox.showinfo("Comparison Result", "No differences found between running-config and startup-config.")
         else:
-            print("Differences between running-config and startup-config:")
+            result = "Differences between running-config and startup-config:\n"
             for line in diff_output:
                 if line.startswith('+') and not line.startswith('+++'):
-                    print(f"[Added]{line[1:]}")
+                    result += f"  [Added] {line[1:].strip()}\n"
                 elif line.startswith('-') and not line.startswith('---'):
-                    print(f"[Removed]{line[1:]}")
+                    result += f"  [Removed] {line[1:].strip()}\n"
                 elif line.startswith('@'):
-                    print(f"[Context] {line}")
+                    result += f"  [Context] {line.strip()}\n"
+                    messagebox.showinfo("Comparison Result", result)
     except Exception as e:
-        print(f"Failed to compare running-config with startup-config: {e}")
+        messagebox.showerror("Error", f"Failed to compare running-config with startup-config: {e}")
 
-def compare_running_with_local(connection,local_file_path):
+def compare_running_with_local(connection, local_file_path):
     try:
         running_config = connection.send_command('show running-config')
-        with open(local_file_path,'r') as file:
+        with open(local_file_path, 'r') as file:
             local_config = file.read()
         diff = difflib.unified_diff(local_config.splitlines(), running_config.splitlines(),
                                     fromfile='Local Configuration', tofile='Running Configuration', lineterm='')
         diff_output = list(diff)
         if not diff_output:
-            print("No differences found between running-config and local configuration.")
+            messagebox.showinfo("Comparison Result", "No differences found between running-config and local configuration.")
         else:
-            print("Differences between Running Configuration and Local Configuration:")
+            result = "Differences between Running Configuration and Local Configuration:\n"
             for line in diff_output:
                 if line.startswith('+') and not line.startswith('+++'):
-                    print(f"[Added] {line[1:]}")
+                    result += f"  [Added] {line[1:].strip()}\n"
                 elif line.startswith('-') and not line.startswith('---'):
-                    print(f"[Removed] {line[1:]}")
+                    result += f"  [Removed] {line[1:].strip()}\n"
                 elif line.startswith('@'):
-                    print(f"[Context] {line}")
+                    result += f"  [Context] {line.strip()}\n"
+            messagebox.showinfo("Comparison Result", result)
     except FileNotFoundError:
-        print(f"Error: The local configuration file '{local_file_path}' was not found.")
+        messagebox.showerror("Error", f"The local configuration file '{local_file_path}' was not found.")
     except Exception as e:
-        print(f"Failed to compare running-config with local configuration: {e}")
+        messagebox.showerror("Error", f"Failed to compare running-config with local configuration: {e}")
 
-def config_syslog(connection, syslog_server_ip):
-    pass
+def compare_running_with_harden(connection):
+    try:
+        running_config = connection.send_command('show running-config')
+        running_config_lines = running_config.splitlines()
 
-def compare_running_with_harden(connection, harden_config_path):
-    pass
+        missing_configs = []
+        for config in HARDEN_CONFIG:
+            if config not in running_config_lines:
+                missing_configs.append(config)
+
+        if not missing_configs:
+            messagebox.showinfo("Hardening Check", "All hardening configurations are present in the running configuration.")
+        else:
+            result = "The following hardening configurations are missing from the running configuration:\n"
+            for config in missing_configs:
+                result += f"  [Missing] {config}\n"
+            messagebox.showinfo("Hardening Check Result", result)
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to compare running-config with hardening guidelines: {e}")
 
 def main_():
+    root = tk.Tk()
+    root.withdraw()  # Hide the root window
+
     config = read_config('config.yaml')
     if config is None:
         return
@@ -79,20 +138,13 @@ def main_():
         username = device['username']
         password = device['password']
         secret = device['secret']
-        syslog_server_ip = input(f"Enter the syslog server IP for {device['name']}:")
-        local_file_path = input(f"Enter the local configuration file path for {device['name']}:")
-        connection = create_ssh_connection(ip,secret,username,password)
+        connection = create_ssh_connection(ip, secret, username, password)
+
         if not connection:
-            return
+            continue
 
         while True:
-            print("\nSelect an option:")
-            print("1. Compare Running with Startup Configuration")
-            print("2. Compare Running with Local Configuration")
-            print("3. Compare Running with Harden Configuration")
-            print("4. Configure Syslog Server")
-            print("0. Exit")
-            choice = input("Enter your choice (0-4): ")
+            choice = simpledialog.askstring("Select Option", "Enter your choice:\n1. Compare Running with Startup Configuration\n2. Compare Running with Local Configuration\n3. Compare Running with Harden Configuration\n0. Exit")
 
             if choice == '0':
                 connection.disconnect()
@@ -100,14 +152,13 @@ def main_():
             elif choice == '1':
                 compare_running_with_startup(connection)
             elif choice == '2':
-                compare_running_with_local(connection, local_file_path)
+                local_file_path = simpledialog.askstring("Input", "Enter the local configuration file path:")
+                if local_file_path:
+                    compare_running_with_local(connection, local_file_path)
             elif choice == '3':
-                harden_config_path = input("Enter the hardening configuration file path: ")
-                compare_running_with_harden(connection, harden_config_path)
-            elif choice == '4':
-                config_syslog(connection, syslog_server_ip)
+                compare_running_with_harden(connection)
             else:
-                print("Invalid choice. Please enter a number between 0 and 4.")
+                messagebox.showwarning("Invalid Choice", "Please enter a valid number between 0 and 3.")
 
 if __name__ == "__main__":
     main_()
