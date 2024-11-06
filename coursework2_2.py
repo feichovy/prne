@@ -1,16 +1,19 @@
+# Remember SSH to device manually at first time
 import difflib
 import tkinter as tk
-from tkinter import simpledialog, messagebox
+from tkinter import simpledialog, messagebox # Creating simple GUI
 import yaml
 from netmiko import ConnectHandler
-from tkinter.scrolledtext import ScrolledText
+from tkinter.scrolledtext import ScrolledText # Enable users to scroll down in the output
 
 # Hardened configuration guidelines as a Python dictionary
 HARDEN_CONFIG = [
     'service password-encryption',
     'no ip http server',
     'no cdp run',
-    'snmp-server community public RO'
+    'no ip source-route',
+    'transport input ssh',
+    'no transport input telnet'
 ]
 
 def read_config(file_path):
@@ -43,6 +46,7 @@ def read_config(file_path):
 
 
 def create_ssh_connection(ip, secret, username, password):
+    # Connect to device and enter into previlledge mode
     try:
         network_device = {
             'device_type': 'cisco_ios',
@@ -54,6 +58,7 @@ def create_ssh_connection(ip, secret, username, password):
         }
         connection = ConnectHandler(**network_device)
         connection.enable()
+        # Avoiding incomplete output
         connection.send_command('terminal length 0')
         return connection
     except Exception as e:
@@ -63,12 +68,15 @@ def create_ssh_connection(ip, secret, username, password):
 
 def compare_running_with_startup(connection):
     try:
+        # Using 2 variables to store the configurations
         running_config = connection.send_command('show running-config')
         startup_config = connection.send_command('show startup-config')
+        # Using diff lib to collect the differecences between files and save it
         diff = difflib.unified_diff(startup_config.splitlines(), running_config.splitlines(),
                                     fromfile='Startup-Configuration', tofile='Running-Configuration', lineterm='')
         diff_output = list(diff)
         if not diff_output:
+            # Displaying window to inform users
             messagebox.showinfo("Comparison Result", "No differences found between running-config and startup-config.")
         else:
             show_colored_diff(diff_output, "Differences between running-config and startup-config:")
@@ -85,12 +93,15 @@ def compare_running_with_local(connection, local_file_path):
                                     fromfile='Local Configuration', tofile='Running Configuration', lineterm='')
         diff_output = list(diff)
         if not diff_output:
+            # Displaying window to inform users
             messagebox.showinfo("Comparison Result", "No differences found between running-config and local configuration.")
         else:
             show_colored_diff(diff_output, "Differences between Running Configuration and Local Configuration:")
     except FileNotFoundError:
+        # Displaying window to inform users
         messagebox.showerror("Error", f"The local configuration file '{local_file_path}' was not found.")
     except Exception as e:
+        # Displaying window to inform users
         messagebox.showerror("Error", f"Failed to compare running-config with local configuration: {e}")
 
 
@@ -98,20 +109,23 @@ def compare_running_with_harden(connection):
     try:
         running_config = connection.send_command('show running-config')
         running_config_lines = running_config.splitlines()
-
+        # Define a list to store the missing Harden Configuration
         missing_configs = []
         for config in HARDEN_CONFIG:
             if config not in running_config_lines:
                 missing_configs.append(config)
 
         if not missing_configs:
+            # Displaying window to inform users
             messagebox.showinfo("Hardening Check", "All hardening configurations are present in the running configuration.")
         else:
             result = "The following hardening configurations are missing from the running configuration:\n"
             for config in missing_configs:
                 result += f"  [Missing] {config}\n"
+            # Displaying window to inform users
             messagebox.showinfo("Hardening Check Result", result)
     except Exception as e:
+        # Displaying window to inform users
         messagebox.showerror("Error", f"Failed to compare running-config with hardening guidelines: {e}")
 
 
@@ -119,35 +133,43 @@ def config_syslog(connection, syslog_server_ip):
     try:
         command = f'logging host {syslog_server_ip}'
         connection.send_config_set([command])
+        # Displaying window to inform users
         messagebox.showinfo("Success", f"Syslog server {syslog_server_ip} configured successfully.")
     except Exception as e:
+        # Displaying window to inform users
         messagebox.showerror("Error", f"Failed to configure syslog server: {e}")
 
 
 def show_colored_diff(diff_output, title):
-    diff_window = tk.Toplevel()
-    diff_window.title(title)
-    text_area = ScrolledText(diff_window, width=100, height=30)
-    text_area.pack(fill=tk.BOTH, expand=True)
-
+    diff_window = tk.Toplevel() # Create a new top window to show the differences
+    diff_window.title(title) # Set the title for the window
+    text_area = ScrolledText(diff_window, width=100, height=30) # Create a Scrollable text area
+    text_area.pack(fill=tk.BOTH, expand=True) # Fill the entire window and expand automatically when the window is resized
+    # Read difference line by line
     for line in diff_output:
+        # Using added to tag the added lines
         if line.startswith('+') and not line.startswith('+++'):
             text_area.insert(tk.END, f"{line}\n", 'added')
+        # Using removed to tag the removed lines
         elif line.startswith('-') and not line.startswith('---'):
             text_area.insert(tk.END, f"{line}\n", 'removed')
+        # Using context to tag the context lines
         elif line.startswith('@'):
             text_area.insert(tk.END, f"{line}\n", 'context')
+        # Other lines are inserted directly
         else:
             text_area.insert(tk.END, f"{line}\n")
 
-    text_area.tag_config('added', foreground='red')
-    text_area.tag_config('removed', foreground='blue')
-    text_area.tag_config('context', foreground='green')
-
+    text_area.tag_config('added', foreground='red') # Using red font to notice added lines
+    text_area.tag_config('removed', foreground='blue')# Using blue font to notice removed lines
+    text_area.tag_config('context', foreground='green')# Using green font to notice context lines
+    # Set area as only read to prevent modification
+    text_area.config(state=tk.DISABLED)
 
 def main_():
+    # Create a root tkinter window
     root = tk.Tk()
-    root.withdraw()  # Hide the root window
+    root.withdraw()  # Hide the root window cause we don't need to display it
 
     config = read_config('config.yaml')
     if config is None:
