@@ -1,9 +1,5 @@
 from netmiko import ConnectHandler
 import json
-
-from establish_telnet_connection import username, password
-
-
 def read_config(file_path):
     try:
         # Read the configuration file
