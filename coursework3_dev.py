@@ -53,7 +53,7 @@ def connect_to_device(username, ip, password, secret):
 
 # Configure Loopback0 & GigabitEthernet1
 def config_interface(connection, interface, ip, mask):
-
+    pass
 
 if __name__ == "__main__":
     config = read_config('config.json')
