@@ -178,9 +178,7 @@ def main_():
     for device in config['devices']:
         ip = device['ip']
         username = device['username']
-        password = device['password']
-        secret = device['secret']
-        connection = create_ssh_connection(ip, secret, username, password)
+        pass
 
         if not connection:
             continue
